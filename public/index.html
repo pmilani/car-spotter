@@ -49,6 +49,31 @@ const $=s=>document.querySelector(s);
 const h=(t,p={},...k)=>{const e=document.createElement(t);for(const[a,v]of Object.entries(p)){if(a==='on')for(const[ev,fn]of Object.entries(v))e.addEventListener(ev,fn);else if(a==='text')e.textContent=v;else if(a in e)try{e[a]=v}catch(_){}else e.setAttribute(a,v)}k.flat().forEach(c=>c!=null&&e.append(c.nodeType?c:document.createTextNode(c)));return e};
 if(/PASTE/.test(JSON.stringify(firebaseConfig)))showErr('Fill in public/firebase-config.js with your Firebase web app values, then reload.');
 
+const API_RETRY_DELAYS=[2000,4000,8000,12000,15000,15000,15000];
+async function fetchApiJson(url,onRetry=()=>{}){
+  const deadline=Date.now()+90000;let lastError;
+  for(let attempt=1;attempt<=API_RETRY_DELAYS.length+1;attempt++){
+    const remaining=deadline-Date.now();if(remaining<=0)break;
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),Math.min(12000,remaining));
+    try{
+      const r=await fetch(url,{signal:controller.signal});
+      if(r.ok)return await r.json();
+      const body=await r.json().catch(()=>({})),e=new Error(body.error||`Photo service returned ${r.status}`);
+      if(r.status!==408&&r.status!==429&&r.status<500)throw e;
+      lastError=e;
+    }catch(e){
+      if(e.name==='AbortError'||e instanceof TypeError)lastError=e;
+      else throw e;
+    }finally{clearTimeout(timeout)}
+    if(attempt>API_RETRY_DELAYS.length)break;
+    const wait=Math.min(API_RETRY_DELAYS[attempt-1],deadline-Date.now());if(wait<=0)break;
+    onRetry(attempt+1,Math.ceil(wait/1000));
+    await new Promise(resolve=>setTimeout(resolve,wait));
+  }
+  const reason=lastError?.name==='AbortError'?'request timed out':lastError?.message||'network error';
+  throw new Error(`Photo service is still unavailable after automatic retries (${reason}). Try again in a moment.`);
+}
+
 // ---- photo source types. To add a new type: add an entry here (parse the user's input, fetch photos) and a handler in server.js.
 const SOURCE_TYPES={
   icloud:{id:'icloud',name:'iCloud shared album',placeholder:'https://www.icloud.com/sharedalbum/#…',
@@ -60,7 +85,7 @@ const SOURCE_TYPES={
           if (!/^[A-Za-z0-9-_]{6,99}$/.test(t)) throw new Error('Could not find an album token in that link');
           return {token: t}
       },
-    async fetch(s,refresh){const r=await fetch(`${api}/api/source?type=icloud&token=${encodeURIComponent(s.token)}${refresh?'&refresh=1':''}`),j=await r.json();if(!r.ok)throw new Error(j.error);return j}}
+    async fetch(s,refresh,onRetry){return fetchApiJson(`${api}/api/source?type=icloud&token=${encodeURIComponent(s.token)}${refresh?'&refresh=1':''}`,onRetry)}}
 };
 
 const S={showVideos:false,showHidden:false,hidden:{},tab:'photos',photos:[],cars:[],albums:[],albumId:null,loadedKey:null,sel:null,user:null,draft:{newName:'',src:{}}};
@@ -98,7 +123,7 @@ async function loadPhotos(refresh=false){
   const a=curAlbum(),seq=++loadSeq;
   if(!a||!(a.sources||[]).length){S.photos=[];flash('');render();return}
   flash('Loading photos…');
-  const res=await Promise.all(a.sources.map(async s=>{try{const T=SOURCE_TYPES[s.type];if(!T)throw new Error('Unsupported source type '+s.type);return{s,photos:await T.fetch(s,refresh)}}catch(e){return{s,error:e.message}}}));
+  const res=await Promise.all(a.sources.map(async s=>{try{const T=SOURCE_TYPES[s.type];if(!T)throw new Error('Unsupported source type '+s.type);return{s,photos:await T.fetch(s,refresh,(attempt,delay)=>flash(`Photo service is waking up. Retrying in ${delay}s (attempt ${attempt}/8)…`))}}catch(e){return{s,error:e.message}}}));
   if(seq!==loadSeq)return;
   const seen=new Set();S.photos=[];
   res.forEach(r=>(r.photos||[]).forEach(p=>{if(!seen.has(p.guid)){seen.add(p.guid);S.photos.push({...p,src:r.s.label||r.s.type})}}));
@@ -116,7 +141,7 @@ async function createAlbum(){
   try{await setDoc(doc(db,'albums',id),{name,sources:[],by:S.user.email,ts:Date.now()});flash('Album created. Add a photo source below.')}catch(e){flash('Could not create album: '+e.message)}}
 async function addSource(a){
   const d=S.draft.src[a.id]||{},T=SOURCE_TYPES[d.type||'icloud'];
-  try{const cfg=T.parse(d.link);flash('Checking source…');const photos=await T.fetch(cfg,true);
+  try{const cfg=T.parse(d.link);flash('Checking source…');const photos=await T.fetch(cfg,true,(attempt,delay)=>flash(`Photo service is waking up. Retrying in ${delay}s (attempt ${attempt}/8)…`));
     const s={id:rid(),type:T.id,label:(d.label||'').trim()||`${T.name} (${photos.length} photos)`,...cfg};
     await saveAlbum(a,{sources:[...(a.sources||[]),s]});S.draft.src[a.id]={type:T.id,label:'',link:''};flash(`Added source with ${photos.length} photos.`)}
   catch(e){flash('Could not add source: '+e.message)}}

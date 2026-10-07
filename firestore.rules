@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{coll}/{id} {
-      allow read, write: if coll in ['cars','hidden']
+      allow read, write: if coll in ['cars', 'hidden', 'albums']
         && request.auth != null
         && request.auth.token.email_verified == true
         && request.auth.token.email in [

@@ -52,10 +52,14 @@ if(/PASTE/.test(JSON.stringify(firebaseConfig)))showErr('Fill in public/firebase
 // ---- photo source types. To add a new type: add an entry here (parse the user's input, fetch photos) and a handler in server.js.
 const SOURCE_TYPES={
   icloud:{id:'icloud',name:'iCloud shared album',placeholder:'https://www.icloud.com/sharedalbum/#…',
-    parse(input){input=(input||'').trim();if(!input)throw new Error('Paste the shared album link');
-      if(/share\.icloud\.com/i.test(input))throw new Error('Only classic shared-album links (icloud.com/sharedalbum/#…) are supported');
-      const t=input.includes('#')?input.split('#').pop().trim():input;
-      if(!/^[A-Za-z0-9]{6,64}$/.test(t))throw new Error('Could not find an album token in that link');return {token:t}},
+      parse(input) {
+          input = (input || '').trim();
+          if (!input) throw new Error('Paste the shared album link');
+          if (/share\.icloud\.com/i.test(input)) throw new Error('Only classic shared-album links (icloud.com/sharedalbum/#…) are supported');
+          const t = input.includes('#') ? input.split('#').pop().trim() : input;
+          if (!/^[A-Za-z0-9-_]{6,99}$/.test(t)) throw new Error('Could not find an album token in that link');
+          return {token: t}
+      },
     async fetch(s,refresh){const r=await fetch(`${api}/api/source?type=icloud&token=${encodeURIComponent(s.token)}${refresh?'&refresh=1':''}`),j=await r.json();if(!r.ok)throw new Error(j.error);return j}}
 };
 

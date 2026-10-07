@@ -63,7 +63,7 @@ const SOURCE_TYPES={
     async fetch(s,refresh){const r=await fetch(`${api}/api/source?type=icloud&token=${encodeURIComponent(s.token)}${refresh?'&refresh=1':''}`),j=await r.json();if(!r.ok)throw new Error(j.error);return j}}
 };
 
-const S={showVideos:true,showHidden:false,hidden:{},tab:'photos',photos:[],cars:[],albums:[],albumId:null,loadedKey:null,sel:null,user:null,draft:{newName:'',src:{}}};
+const S={showVideos:false,showHidden:false,hidden:{},tab:'photos',photos:[],cars:[],albums:[],albumId:null,loadedKey:null,sel:null,user:null,draft:{newName:'',src:{}}};
 try{S.albumId=localStorage.getItem('cs.album')||null}catch(_){}
 const store=()=>{try{localStorage.setItem('cs.album',S.albumId||'')}catch(_){}};
 const flash=t=>$('#msg').textContent=t||'';

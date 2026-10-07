@@ -1,7 +1,16 @@
 import http from 'node:http';
 
 const PORT = Number(process.env.PORT || 3000);
-const token = (process.env.ALBUM_TOKEN || '').trim().replace(/^['"]|['"]$/g, '');
+const albumUrl = (process.env.ALBUM_URL || '').trim().replace(/^['"]|['"]$/g, '');
+const token = (() => {
+  if (!albumUrl) return '';
+  try {
+    const hash = new URL(albumUrl).hash;
+    return hash ? hash.slice(1) : '';
+  } catch {
+    return albumUrl.includes('#') ? albumUrl.split('#')[1] : '';
+  }
+})().trim();
 const allowedOrigin = (process.env.ALLOWED_ORIGIN || '*').trim();
 const B62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
@@ -17,7 +26,7 @@ async function ic(host, endpoint, body) {
 
 let cache = { t: 0, photos: [] };
 async function album(forceRefresh = false) {
-  if (!token) throw new Error('No album token configured. Set ALBUM_TOKEN in the Render environment variables.');
+  if (!token) throw new Error('No album URL configured. Set ALBUM_URL in the Render environment variables.');
   if (!forceRefresh && Date.now() - cache.t < 10 * 60e3 && cache.photos.length) return cache.photos;
 
   const n = token[0] === 'A'

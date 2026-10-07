@@ -3,7 +3,7 @@ import http from 'node:http';
 const PORT = Number(process.env.PORT || 3000);
 const allowedOrigin = (process.env.ALLOWED_ORIGIN || '*').trim();
 const B62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-const TOKEN_RE = /^[A-Za-z0-9]{6,64}$/;
+const TOKEN_RE = /^[A-Za-z0-9-_]{6,99}$/;
 const ICLOUD_HOST_RE = /^p\d+-sharedstreams\.icloud\.com$/;
 
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
